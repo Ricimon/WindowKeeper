@@ -1,4 +1,5 @@
 ﻿using Ricimon.WindowKeeper.Common.WinApiBridge;
+using System;
 using System.Collections.Generic;
 
 namespace Ricimon.WindowKeeper.Common.Models

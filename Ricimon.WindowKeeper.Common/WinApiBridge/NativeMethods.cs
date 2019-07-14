@@ -100,12 +100,15 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
     [SuppressUnmanagedCodeSecurity]
     internal static class NativeMethods
     {
+        // Intentionally CharSet.Ansi
         [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageA", CharSet = CharSet.Ansi, SetLastError = true, ExactSpelling = true)]
         public static extern int RegisterWindowMessage(string lpString);
 
+        // Intentionally CharSet.Ansi
         [DllImport("user32.dll", CharSet = CharSet.Ansi, SetLastError = true, ExactSpelling = true)]
         public static extern int DeregisterShellHookWindow(IntPtr hWnd);
 
+        // Intentionally CharSet.Ansi
         [DllImport("user32.dll", CharSet = CharSet.Ansi, SetLastError = true, ExactSpelling = true)]
         public static extern int RegisterShellHookWindow(IntPtr hWnd);
 
