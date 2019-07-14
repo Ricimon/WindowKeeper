@@ -197,5 +197,15 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
             NativeMethods.GetWindowText(hWnd, sb, sb.Capacity);
             return sb.ToString();
         }
+
+        public static void MoveWindow(IntPtr hWnd, RECT rect)
+        {
+            NativeMethods.MoveWindow(hWnd, 
+                rect.left, 
+                rect.top, 
+                rect.right - rect.left, 
+                rect.bottom - rect.top, 
+                true);
+        }
     }
 }

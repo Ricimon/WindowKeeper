@@ -12,6 +12,7 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
     // adapted from https://archive.codeplex.com/?p=persistentwindows
     // and https://referencesource.microsoft.com/#System.Windows.Forms/winforms/Managed/System/WinForms/SafeNativeMethods.cs
     // and https://referencesource.microsoft.com/#System.Windows.Forms/winforms/Managed/System/WinForms/UnsafeNativeMethods.cs
+    // and https://stackoverflow.com/questions/5020559/screen-allscreen-is-not-giving-the-correct-monitor-count
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT
@@ -147,6 +148,9 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
         [DllImport("user32.dll")]
         public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr voidProcessId);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, ExactSpelling = true, SetLastError = true)]
+        public static extern void MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+
         [DllImport("user32.dll", SetLastError = false)]
         public static extern IntPtr SetWinEventHook(WinEventHook.SWEH_Events eventMin, WinEventHook.SWEH_Events eventMax,
                                                     IntPtr hmodWinEventProc, WinEventHook.WinEventDelegate lpfnWinEventProc,
@@ -154,5 +158,10 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
 
         [DllImport("user32.dll", SetLastError = false)]
         public static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+        [DllImport("user32.dll")]
+        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lpRect, MonitorEnumProc callback, int dwData);
+
+        public delegate bool MonitorEnumProc(IntPtr hDesktop, IntPtr hdc, ref RECT pRect, int dwData);
     }
 }

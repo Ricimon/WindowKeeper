@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Text;
@@ -22,8 +23,12 @@ namespace Ricimon.WindowKeeper.SystrayShell
             InitializeComponent();
 
             MainView = new MainWindow();
-            //MainView.Hide();
+
+#if DEBUG
             MainView.Show();
+#else
+            MainView.Hide();
+#endif
         }
 
         private void DiagnosticsToolStripMenuItem_Click(object sender, EventArgs e)
