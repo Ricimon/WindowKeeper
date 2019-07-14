@@ -17,20 +17,23 @@ namespace Ricimon.WindowKeeper.Common.Diagnostics
             var consoleTarget = new ColoredConsoleTarget();
             config.AddTarget("console", consoleTarget);
 
-            var fileTarget = new FileTarget();
-            config.AddTarget("file", fileTarget);
-
             // Set target properties
             consoleTarget.Layout = @"${date:format=HH\\:mm\\:ss} ${logger} ${message}";
-            fileTarget.FileName = "${basedir}/WindowKeeper.Log";
-            fileTarget.Layout = "${date:format=HH\\:mm\\:ss} ${logger} ${message}";
 
             // Define rules
             var rule1 = new LoggingRule("*", LogLevel.Trace, consoleTarget);
             config.LoggingRules.Add(rule1);
 
+#if DEBUG
+            var fileTarget = new FileTarget();
+            config.AddTarget("file", fileTarget);
+
+            fileTarget.FileName = "${basedir}/WindowKeeper.Log";
+            fileTarget.Layout = "${date:format=HH\\:mm\\:ss} ${logger} ${message}";
+
             var rule2 = new LoggingRule("*", LogLevel.Trace, fileTarget);
             config.LoggingRules.Add(rule2);
+#endif
 
             // Activate the configuration
             LogManager.Configuration = config;
