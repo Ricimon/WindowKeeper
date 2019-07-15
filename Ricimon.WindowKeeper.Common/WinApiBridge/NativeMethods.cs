@@ -72,12 +72,12 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
         public POINT ptMaxPosition;
         public RECT rcNormalPosition;
 
-        public enum WindowStatus
+        public enum WindowStatus : int
         {
-            Unknown,
-            Normal,
-            Minimized,
-            Maximized,
+            Unknown = 0,
+            Normal = 1,
+            Minimized = 2,
+            Maximized = 3,
         }
         public WindowStatus windowStatus
         {
@@ -96,6 +96,11 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
                 }
             }
         }
+    }
+
+    public static class SW_Ints
+    {
+        public static int SW_SHOWMAXIMIZED = 3;
     }
 
     [SuppressUnmanagedCodeSecurity]
@@ -150,6 +155,9 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, CallingConvention = CallingConvention.StdCall, ExactSpelling = true, SetLastError = true)]
         public static extern void MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         [DllImport("user32.dll", SetLastError = false)]
         public static extern IntPtr SetWinEventHook(WinEventHook.SWEH_Events eventMin, WinEventHook.SWEH_Events eventMax,

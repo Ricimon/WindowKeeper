@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -16,23 +17,22 @@ using System.Windows.Shapes;
 namespace Ricimon.WindowKeeper.WpfShell
 {
     // adapted from https://archive.codeplex.com/?p=persistentwindows
+    // and https://www.c-sharpcorner.com/forums/changing-the-x-button-functionality-in-wpf-window
 
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
-        public bool IsClosed { get; set; }
-
         public MainWindow()
         {
             InitializeComponent();
         }
 
-        protected override void OnClosed(EventArgs e)
+        private void Window_Closing(object sender, CancelEventArgs e)
         {
-            base.OnClosed(e);
-            IsClosed = true;
+            e.Cancel = true;
+            this.Hide();
         }
     }
 }

@@ -190,12 +190,22 @@ namespace Ricimon.WindowKeeper.Common
 
                                 foreach (var window in _trackedWindows)
                                 {
-                                    RECT savedRect = window.Value.Info.Rect;
-                                    if (WinEventHook.GetWindowRect(window.Key, out RECT rect) && savedRect != rect)
+                                    WindowInfo savedWindow = window.Value.Info;
+                                    if (WinEventHook.GetWindowRect(window.Key, out RECT rect) && savedWindow.Rect != rect)
                                     {
-                                        Log.Info($"Restoring position of {window.Key}: {WinEventHook.GetWindowText(window.Key)} to\n" +
-                                            $"top{savedRect.top}, left{savedRect.left}, right{savedRect.right}, bottom{savedRect.bottom}");
-                                        WinEventHook.MoveWindow(window.Key, savedRect);
+                                        var windowInfo = GetWindowInfo(window.Key, rect);
+                                        var savedRect = savedWindow.Rect;
+                                        Log.Info($"Restoring position of {window.Key}: {WinEventHook.GetWindowText(window.Key)} to" +
+                                            $"\n\tstatus: {savedWindow.WindowStatus.ToString()}, top{savedRect.top}, left{savedRect.left}, right{savedRect.right}, bottom{savedRect.bottom}");
+
+                                        WinEventHook.MoveWindow(window.Key, savedWindow.Rect);
+
+                                        // Some previously maximized windows may not remain maximized when moved back, so manually maximize them.
+                                        if (savedWindow.WindowStatus == WINDOWPLACEMENT.WindowStatus.Maximized &&
+                                            windowInfo.WindowStatus != savedWindow.WindowStatus)
+                                        {
+                                            NativeMethods.ShowWindow(window.Key, SW_Ints.SW_SHOWMAXIMIZED);
+                                        }
                                     }
                                 }
 
