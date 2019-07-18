@@ -17,7 +17,7 @@ namespace Ricimon.WindowKeeper.Common
 {
     public partial class WindowKeeperProcessor : IDisposable
     {
-        // Tunable paramters
+        // Tunable parameters
         /// <summary>
         /// Some windows (like IntelliJ) will move themselves back to their no-DisplayPort monitor position even after they've been
         /// moved to their original position. So, we continue retaining these window positions for a set amount time. If they move 
