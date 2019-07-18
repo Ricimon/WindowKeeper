@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Ricimon.WindowKeeper.WpfShell"
         mc:Ignorable="d"
-        Title="WindowKeeper v1.1" Height="900" Width="800" Icon="Oxygen-Icons.org-Oxygen-Apps-krdc.ico" Closing="Window_Closing">
+        Title="WindowKeeper v1.2" Height="900" Width="800" Icon="Oxygen-Icons.org-Oxygen-Apps-krdc.ico" Closing="Window_Closing">
     <Grid>
         <local:DiagnosticsView />
     </Grid>
