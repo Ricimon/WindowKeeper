@@ -10,11 +10,26 @@ using Ricimon.WindowKeeper.Common.Diagnostics;
 using Ricimon.WindowKeeper.Common.WinApiBridge;
 using Ricimon.WindowKeeper.Common.Models;
 using Microsoft.Win32;
+using System.Threading.Tasks;
+using Ricimon.WindowKeeper.Common.Util;
 
 namespace Ricimon.WindowKeeper.Common
 {
     public partial class WindowKeeperProcessor : IDisposable
     {
+        // Tunable paramters
+        /// <summary>
+        /// Some windows (like IntelliJ) will move themselves back to their no-DisplayPort monitor position even after they've been
+        /// moved to their original position. So, we continue retaining these window positions for a set amount time. If they move 
+        /// a significant amount (as in not dragged by user), then we push them back to their original position.
+        /// </summary>
+        private const float CONTINUOUS_WINDOW_RETAIN_TIME_AFTER_SETTING_RESTORE = 10f;
+        /// <summary>
+        /// Minimum distance from old window rect center to new window rect center for a LOCATIONCHANGED event to be regarded as
+        /// an automatic window movement that should be forced back to the window's original position.
+        /// </summary>
+        private const int MIN_CENTER_DISTANCE_FOR_WINDOW_RETAIN = 100;
+
         private readonly IDictionary<WinEventHook.SWEH_Events, WinEventHook.WinEventDelegate> _eventDelegates;
         static GCHandle GCSafetyHandle;
 
@@ -22,7 +37,20 @@ namespace Ricimon.WindowKeeper.Common
         private enum State
         {
             SavingWindowPositions,
-            WaitingForSavedMonitorSettingRestore
+            WaitingForSavedMonitorSettingRestore,
+            RetainingWindowPositionsAfterMonitorSettingRestore
+        }
+        private State state
+        {
+            get => _state;
+            set
+            {
+                if (value != _state)
+                {
+                    Log.Info($"State change: {value.ToString()}");
+                }
+                _state = value;
+            }
         }
         private State _state = State.SavingWindowPositions;
         private readonly IDictionary<IntPtr, TrackedWindow> _trackedWindows = new Dictionary<IntPtr, TrackedWindow>();
@@ -65,7 +93,7 @@ namespace Ricimon.WindowKeeper.Common
                 switch(ev)
                 {
                     case SystemProcessHook.ShellEvent.HSHELL_WINDOWCREATED:
-                        if (_state == State.SavingWindowPositions)
+                        if (state != State.WaitingForSavedMonitorSettingRestore)
                         {
                             string windowName = WinEventHook.GetWindowText(hWnd);
                             Log.Info($"{ev.ToString()} - {hWnd}: {windowName}");
@@ -170,59 +198,36 @@ namespace Ricimon.WindowKeeper.Common
                 }
                 else
                 {
-                    switch (_state)
+                    string log = $"Monitor count: {monitors.Count}";
+                    for (int i = 0; i < monitors.Count; i++)
+                    {
+                        var rect = monitors[i].Rect;
+                        log += $"\n\t{i}: top{rect.top}, left{rect.left}, right{rect.right}, bottom{rect.bottom}";
+                    }
+                    Log.Info(log);
+
+                    switch (state)
                     {
                         case State.SavingWindowPositions:
+                        case State.RetainingWindowPositionsAfterMonitorSettingRestore:
                             if (_savedMonitorSetting.HasSameMonitors(monitors))
                             {
-                                return; // redudant call, discard
+                                RestoreWindowPositions();
                             }
                             else
                             {
-                                _state = State.WaitingForSavedMonitorSettingRestore;
-                                Log.Info($"State change: {_state.ToString()}");
+                                state = State.WaitingForSavedMonitorSettingRestore;
                             }
                             break;
                         case State.WaitingForSavedMonitorSettingRestore:
                             if (_savedMonitorSetting.HasSameMonitors(monitors))
                             {
                                 Log.Info("Saved monitor setting restored, restoring window positions");
-
-                                foreach (var window in _trackedWindows)
-                                {
-                                    WindowInfo savedWindow = window.Value.Info;
-                                    if (WinEventHook.GetWindowRect(window.Key, out RECT rect) && savedWindow.Rect != rect)
-                                    {
-                                        var windowInfo = GetWindowInfo(window.Key, rect);
-                                        var savedRect = savedWindow.Rect;
-                                        Log.Info($"Restoring position of {window.Key}: {WinEventHook.GetWindowText(window.Key)} to" +
-                                            $"\n\tstatus: {savedWindow.WindowStatus.ToString()}, top{savedRect.top}, left{savedRect.left}, right{savedRect.right}, bottom{savedRect.bottom}");
-
-                                        WinEventHook.MoveWindow(window.Key, savedWindow.Rect);
-
-                                        // Some previously maximized windows may not remain maximized when moved back, so manually maximize them.
-                                        if (savedWindow.WindowStatus == WINDOWPLACEMENT.WindowStatus.Maximized &&
-                                            windowInfo.WindowStatus != savedWindow.WindowStatus)
-                                        {
-                                            NativeMethods.ShowWindow(window.Key, SW_Ints.SW_SHOWMAXIMIZED);
-                                        }
-                                    }
-                                }
-
-                                _state = State.SavingWindowPositions;
-                                Log.Info($"State change: {_state.ToString()}");
+                                RestoreWindowPositions();
                             }
                             break;
                     }
                 }
-
-                string log = $"Monitor count: {monitors.Count}";
-                for (int i = 0; i < monitors.Count; i++)
-                {
-                    var rect = monitors[i].Rect;
-                    log += $"\n\t{i}: top{rect.top}, left{rect.left}, right{rect.right}, bottom{rect.bottom}";
-                }
-                Log.Info(log);
             }
             else
             {
@@ -230,30 +235,93 @@ namespace Ricimon.WindowKeeper.Common
             }
         }
 
+        private void RestoreWindowPositions()
+        {
+            foreach (var window in _trackedWindows)
+            {
+                RestoreWindowPosition(window.Key);
+            }
+
+            state = State.RetainingWindowPositionsAfterMonitorSettingRestore;
+            CancellableMethodCollection.CallCancellableMethod("retainWindows", async (cancelToken) =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(CONTINUOUS_WINDOW_RETAIN_TIME_AFTER_SETTING_RESTORE), cancelToken);
+                }
+                catch (TaskCanceledException) { return; }
+
+                state = State.SavingWindowPositions;
+            });
+        }
+
+        private void RestoreWindowPosition(IntPtr hWnd)
+        {
+            if (_trackedWindows.TryGetValue(hWnd, out var window))
+            {
+                WindowInfo savedWindow = window.Info;
+                if (WinEventHook.GetWindowRect(hWnd, out RECT rect) && savedWindow.Rect != rect)
+                {
+                    var windowInfo = GetWindowInfo(hWnd, rect);
+                    var savedRect = savedWindow.Rect;
+                    Log.Info($"Restoring position of {hWnd}: {WinEventHook.GetWindowText(hWnd)} to" +
+                        $"\n\tstatus: {savedWindow.WindowStatus.ToString()}, top{savedRect.top}, left{savedRect.left}, right{savedRect.right}, bottom{savedRect.bottom}");
+
+                    WinEventHook.MoveWindow(hWnd, savedWindow.Rect);
+
+                    // Some previously maximized windows may not remain maximized when moved back, so manually maximize them.
+                    if (savedWindow.WindowStatus == WINDOWPLACEMENT.WindowStatus.Maximized &&
+                        windowInfo.WindowStatus != savedWindow.WindowStatus)
+                    {
+                        NativeMethods.ShowWindow(hWnd, SW_Ints.SW_SHOWMAXIMIZED);
+                    }
+                }
+            }
+        }
+
         #region Callbacks
         private void WinEventCallback_OBJECT_LOCATIONCHANGE(IntPtr hWinEventHook, WinEventHook.SWEH_Events eventType, IntPtr hWnd, WinEventHook.SWEH_ObjectId idObject, long idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            if (_state != State.SavingWindowPositions)
+            if (state == State.WaitingForSavedMonitorSettingRestore)
             {
                 return;
             }
 
             int windowTextLength = NativeMethods.GetWindowTextLength(hWnd);
             if (windowTextLength > 0)
-            {
                 if (WinEventHook.GetWindowRect(hWnd, out var rect)) // new rect is valid
                 {
                     var windowInfo = GetWindowInfo(hWnd, rect);
                     if (_trackedWindows.TryGetValue(hWnd, out var trackedWindow) && trackedWindow.Info != windowInfo)   // new window info isn't the same as stored window info
                     {
-                        trackedWindow.Info = windowInfo;
+                        switch (state)
+                        {
+                            case State.RetainingWindowPositionsAfterMonitorSettingRestore:
+                                // Don't really want to import a math package, or do data type transforms
+                                var oldCenter = trackedWindow.Info.Rect.center;
+                                var newCenter = windowInfo.Rect.center;
+                                var delX = newCenter.x - oldCenter.x; var delY = newCenter.y - oldCenter.y;
+                                var centerMoveDistanceSq = delX * delX + delY * delY;
 
-                        string windowName = WinEventHook.GetWindowText(hWnd, windowTextLength);
-                        Log.Info($"Status change on window {hWnd}: {windowName} | " +
-                            $"status: {windowInfo.WindowStatus.ToString()}, top{rect.top}, left{rect.left}, right{rect.right}, bottom{rect.bottom}");
+                                if (centerMoveDistanceSq >= MIN_CENTER_DISTANCE_FOR_WINDOW_RETAIN * MIN_CENTER_DISTANCE_FOR_WINDOW_RETAIN)
+                                {
+                                    RestoreWindowPosition(hWnd);
+                                }
+                                else
+                                {
+                                    goto case State.SavingWindowPositions;
+                                }
+                                break;
+                            case State.SavingWindowPositions:
+                                trackedWindow.Info = windowInfo;
+
+                                string windowName = WinEventHook.GetWindowText(hWnd, windowTextLength);
+                                Log.Info($"Status change on window {hWnd}: {windowName} | " +
+                                    $"status: {windowInfo.WindowStatus.ToString()}, top{rect.top}, left{rect.left}, right{rect.right}, bottom{rect.bottom}");
+                                break;
+                        }
                     }
                 }
-            }
         }
 
         private void OnDisplaySettingsChangedCallback(object sender, EventArgs e)
@@ -266,8 +334,8 @@ namespace Ricimon.WindowKeeper.Common
             switch(e.Reason)
             {
                 case SessionSwitchReason.SessionLock:
-                    _state = State.WaitingForSavedMonitorSettingRestore;
-                    Log.Info($"Session locked, state change: {_state.ToString()}");
+                    state = State.WaitingForSavedMonitorSettingRestore;
+                    Log.Info($"Session locked");
                     break;
                 case SessionSwitchReason.SessionUnlock:
                     Log.Info($"Session unlocked, checking current monitor setting");

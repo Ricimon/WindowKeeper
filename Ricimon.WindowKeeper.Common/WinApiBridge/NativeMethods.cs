@@ -22,6 +22,13 @@ namespace Ricimon.WindowKeeper.Common.WinApiBridge
         public int right;
         public int bottom;
 
+        public POINT center
+            => new POINT
+            {
+                x = (right - left) / 2,
+                y = (bottom - top) / 2
+            };
+
         public static bool operator ==(RECT r1, RECT r2)
         {
             return r1.left   == r2.left  &&
